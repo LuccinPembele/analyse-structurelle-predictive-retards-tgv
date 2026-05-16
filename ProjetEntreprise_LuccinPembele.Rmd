@@ -1,0 +1,706 @@
+---
+title: "ProjetEntreprise_LuccinPembele"
+author: "Luccin Pembele"
+date: "2026-01-08"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+
+<https://ressources.data.sncf.com/explore/dataset/regularite-mensuelle-tgv-aqst/information/?sort=date&dataChart=eyJxdWVyaWVzIjpbeyJjaGFydHMiOlt7InR5cGUiOiJzcGxpbmUiLCJmdW5jIjoiQVZHIiwieUF4aXMiOiJwcmN0X2NhdXNlX2V4dGVybmUiLCJzY2llbnRpZmljRGlzcGxheSI6dHJ1ZSwiY29sb3IiOiJyYW5nZS1TZXQxIn1dLCJ4QXhpcyI6ImRhdGUiLCJtYXhwb2ludHMiOiIiLCJ0aW1lc2NhbGUiOiJtb250aCIsInNvcnQiOiIiLCJzZXJpZXNCcmVha2Rvd24iOiJzZXJ2aWNlIiwiY29uZmlnIjp7ImRhdGFzZXQiOiJyZWd1bGFyaXRlLW1lbnN1ZWxsZS10Z3YtYXFzdCIsIm9wdGlvbnMiOnsic29ydCI6ImRhdGUifX19XSwiZGlzcGxheUxlZ2VuZCI6dHJ1ZSwiYWxpZ25Nb250aCI6dHJ1ZSwidGltZXNjYWxlIjoiIn0%3D>
+
+# Nettoyage de la base de données
+
+```{r}
+library(xtable)
+setwd('/Users/luccin/Desktop/MASTER ')
+sncf=read.csv("regularite-mensuelle-tgv-aqst.csv",header = TRUE, sep=";")
+```
+
+```{r}
+head(sncf)
+names(sncf)
+```
+
+```{r}
+library(dplyr)
+
+sncf1=rename(sncf,"date" = "Date","service" = "Service","depart" = "Gare.de.départ","arrive" = "Gare.d.arrivée", "duree_moy_trajet"= "Durée.moyenne.du.trajet", "nb_circulations_prevues" = "Nombre.de.circulations.prévues","nb_trains_annule" = "Nombre.de.trains.annulés","commentaire_annuluations" ="Commentaire.annulations","nb_train_en_retard_depart" = "Nombre.de.trains.en.retard.au.départ" , "retard_moyen_train_depart" = "Retard.moyen.des.trains.en.retard.au.départ","retard_moyen_total_train_depart" = "Retard.moyen.de.tous.les.trains.au.départ" ,"commentaire_retard_depart" = "Commentaire.retards.au.départ", "nb_train_en_retard_arrivee" = "Nombre.de.trains.en.retard.à.l.arrivée", "retard_moyen_train_arrivee" = "Retard.moyen.des.trains.en.retard.à.l.arrivée", "retard_moyen_total_train_arrive" = "Retard.moyen.de.tous.les.trains.à.l.arrivée" , "commentaire_retard_arrivee" =  "Commentaire.retards.à.l.arrivée" , "nb_train_retard_15min" = "Nombre.trains.en.retard...15min", "nb_train_retard_15min_vol" = "Retard.moyen.trains.en.retard...15..si.liaison.concurrencée.par.vol." , "nb_train_retard_30min" = "Nombre.trains.en.retard...30min", "nb_train_retard_60min" = "Nombre.trains.en.retard...60min", "%retard_externe" =  "Prct.retard.pour.causes.externes" , "%retard_cause_infrastructure" = "Prct.retard.pour.cause.infrastructure", "%_retard_materiel_roulant" = "Prct.retard.pour.cause.matériel.roulant","%_retard_gestion_trafic" = "Prct.retard.pour.cause.gestion.trafic" ,"%_retard_gestion_gare_reutilisation_materiel" = "Prct.retard.pour.cause.gestion.en.gare.et.réutilisation.de.matériel" , "%retard_prise_en_compte_voyageurs"="Prct.retard.pour.cause.prise.en.compte.voyageurs..affluence..gestions.PSH..correspondances.")
+names(sncf)
+names(sncf1)
+```
+
+```{r}
+sncf=sncf1
+head(sncf1)
+```
+
+```{r}
+dim(sncf)[1]
+```
+
+```{r}
+colSums(is.na(sncf))
+```
+
+```{r}
+sncf$commentaire_annuluations=NULL
+sncf$commentaire_retard_depart=NULL
+sncf$commentaire_retard_arrivee=NULL
+head(sncf)
+colSums(is.na(sncf))
+```
+
+```{r}
+library(lubridate)
+sncf$date=as.Date(paste0(sncf$date, "-01"), format="%Y-%m-%d")
+sncf$mois=month(sncf$date)
+sncf$annee=year(sncf$date)
+unique(sncf$mois)
+unique(sncf$annee)
+```
+
+Taux de retard par trajet
+
+```{r}
+table(sncf$nb_circulations_prevues==0)
+```
+
+```{r}
+sncf = sncf %>% filter(nb_circulations_prevues > 0)
+
+```
+
+```{r}
+sncf$nb_circulations= sncf$nb_circulations_prevues-sncf$nb_trains_annule
+```
+
+```{r}
+sncf$taux_retard=sncf$nb_train_en_retard_arrivee /sncf$nb_circulations_prevues
+head(sncf$taux_retard, 15)
+```
+
+```{r}
+sncf$trajet=paste(sncf$depart, "-", sncf$arrive)
+head(sncf$trajet)
+
+unique(sncf$trajet)
+```
+
+# Analyses descriptives
+
+```{r}
+names(sncf)
+statistiques_cles=sncf %>%
+  summarise(
+    nb_ligne= length(unique(trajet)),
+    Moyenne_retards_depart = mean(nb_train_en_retard_depart),
+    Moyenne_retard_moyen_depart = mean(retard_moyen_train_depart),
+    Moyenne_retards_arrivee = mean(nb_train_en_retard_arrivee),
+    Moyenne_retard_moyen_arrivee = mean(retard_moyen_train_arrivee),
+    Moyenne_taux_retard = mean(taux_retard),
+    Moyenne_nb_circulations = mean(nb_circulations)
+  )
+print(statistiques_cles)
+
+xtable(statistiques_cles, caption = "Statistiques clés")
+```
+
+Nombre de trajet
+
+```{r}
+length(unique(sncf$trajet))
+```
+
+```{r}
+taux_retard_trajet=sncf %>%
+  group_by(trajet) %>%
+  summarise(retard_moyen = mean(taux_retard, na.rm = TRUE),
+            retard_mois = mean(nb_train_en_retard_arrivee, na.rm = TRUE),
+            nb_voyages = sum(nb_circulations))%>%
+  filter(nb_voyages > 500) %>% 
+  arrange(desc(retard_moyen)) %>%
+  head(10)
+
+taux_retard_trajet
+```
+
+```{r}
+retard_trajet=sncf %>%
+  group_by(trajet) %>%
+  summarise(retard_moyen = mean(taux_retard, na.rm = TRUE),
+            retard_mois = mean(nb_train_en_retard_arrivee, na.rm = TRUE),
+            nb_voyages = sum(nb_circulations))%>%
+  filter(nb_voyages > 500) %>% 
+  arrange(desc(retard_mois)) %>%
+  head(10)
+
+retard_trajet
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(taux_retard_trajet, aes(x = reorder(trajet, retard_moyen), y = retard_moyen)) +
+  geom_bar(stat = "identity", fill = "blue") +
+    geom_text(aes(label = round(retard_moyen, 2)), hjust = -0.2, size = 2) +  coord_flip() +
+  labs(title = "Les trajets avec le taux de retard les plus élevé",
+       x = "Trajet",
+       y = "taux de retard") +
+  theme_minimal()
+```
+
+```{r}
+ggplot(retard_trajet, aes(x = reorder(trajet, retard_mois), y = retard_mois)) +
+  geom_bar(stat = "identity", fill = "blue") +
+    geom_text(aes(label = round(retard_mois, 3)), hjust = -0.2, size = 2) +  coord_flip() +
+  labs(title = "Les trajets les plus en retard",
+       x = "Trajet",
+       y = "Nombre de retard par mois") +
+  theme_minimal()
+```
+
+```{r}
+flop_taux_retard_trajet=sncf %>%
+  group_by(trajet) %>%
+  summarise(retard_moyen = mean(taux_retard, na.rm = TRUE),
+            retard_mois = mean(nb_train_en_retard_arrivee, na.rm = TRUE),
+            nb_voyages = sum(nb_circulations))%>%
+  filter(nb_voyages > 500) %>% 
+  arrange(retard_moyen) %>%
+  head(10)
+
+retard_trajet
+```
+
+```{r}
+flop_retard_trajet=sncf %>%
+  group_by(trajet) %>%
+  summarise(retard_moyen = mean(taux_retard, na.rm = TRUE),
+            retard_mois = mean(nb_train_en_retard_arrivee, na.rm = TRUE),
+            nb_voyages = sum(nb_circulations))%>%
+  filter(nb_voyages > 500) %>% 
+  arrange(retard_mois) %>%
+  head(10)
+
+flop_retard_trajet
+```
+
+```{r}
+ggplot(flop_taux_retard_trajet, aes(x = reorder(trajet, retard_moyen), y = retard_moyen)) +
+  geom_bar(stat = "identity", fill = "red") +
+    geom_text(aes(label = round(retard_moyen, 3)), hjust = -0.2, size = 2) +  coord_flip() +
+  labs(title = "Les trajets avec le taux de retard les plus faible",
+       x = "Trajet",
+       y = "taux de retard") +
+  theme_minimal()
+```
+
+```{r}
+ggplot(flop_retard_trajet, aes(x = reorder(trajet, retard_mois), y = retard_mois)) +
+  geom_bar(stat = "identity", fill = "red") +
+    geom_text(aes(label = round(retard_mois, 3)), hjust = -0.2, size = 2) +  coord_flip() +
+  labs(title = "Les trajets les moins en retard",
+       x = "Trajet",
+       y = "Nombre de retard par mois") +
+  theme_minimal()
+```
+
+```{r}
+ggplot(retard_trajet, aes(x = reorder(trajet, retard_moyen), y = retard_moyen)) +
+  geom_bar(stat = "identity", fill = "red") +
+    geom_text(aes(label = round(retard_moyen, 3)), hjust = -0.2, size = 2) +  coord_flip() +
+  labs(title = "Les trajets avec le taux de retard les plus élevé",
+       x = "Trajet",
+       y = "taux de retard") +
+  theme_minimal()
+```
+
+```{r}
+
+ggplot(sncf, aes(x=taux_retard)) +
+  geom_histogram(bins=30, fill="blue", color="white") +
+  labs(title = "Distribution des Taux de Retard Mensuels",
+       x = "Taux de retard", y = "Fréquence") +
+  theme_minimal()
+
+```
+
+```{r}
+sncf_mois=sncf %>%group_by(mois) %>%summarise(taux_retard = mean(taux_retard, na.rm = TRUE))
+sncf_mois
+```
+
+```{r}
+ggplot(sncf_mois, aes(x = reorder(mois, taux_retard), y = taux_retard)) +geom_bar(stat = "identity" ) +
+  labs(title = "Taux de retard sur la saison",
+       x = "Mois",
+       y = "taux de retard") +
+  theme_minimal()
+```
+
+```{r}
+ggplot(sncf, aes(x = factor(mois), y = taux_retard, fill = factor(mois))) +
+  geom_boxplot() + 
+  coord_cartesian(ylim = c(0, 0.40)) + 
+  labs(title = "Dispersion des Retards par Mois",
+       x = "Mois",
+       y = "Taux de retard") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+```{r}
+library(tidyverse)
+causes=sncf %>%summarise(
+    Externe = mean(`%retard_externe`),
+    infra = mean(`%retard_cause_infrastructure`),
+    trafic = mean(`%_retard_gestion_trafic`),
+    materiel = mean(`%_retard_materiel_roulant`),
+    gestion = mean(`%_retard_gestion_gare_reutilisation_materiel`),
+    voyageurs= mean(`%retard_prise_en_compte_voyageurs`)
+    
+  ) %>%
+  pivot_longer(everything(), names_to="cause", values_to="pourcentage")
+
+causes
+xtable(causes,caption = "Répartition moyenne des causes de retard")
+```
+
+```{r}
+ggplot(causes, aes(x=reorder(cause, pourcentage), y=pourcentage, fill=cause)) +
+  geom_col() +
+  coord_flip() +
+  labs(title="Répartition moyenne des causes de retard", x="Cause", y="Pourcentage") +
+  theme_minimal() +
+  theme(legend.position="none")
+
+```
+
+```{r}
+dep_unique = unique(sncf$depart)
+ar_unique = unique(sncf$arrive)
+gare_unique = unique(c(dep_unique, ar_unique))
+
+gares = data.frame(gare = gare_unique, stringsAsFactors = FALSE)
+
+gares
+```
+
+On va utiliser la bibliothèque tidygeocoder pour récupérer les coordonnées des gares (ce code va tourner pendant une bonne minute)
+
+```{r}
+library(tidygeocoder)
+
+gares_geo <- gares %>%
+  geocode(address = gare, method = "osm", lat = latitude, long = longitude)
+```
+
+On récupère alors les coordonnées des gares.
+
+```{r}
+gares_geo
+```
+
+On affiche les gares pour vérifier si les coordonnées sont les bonnes.
+
+```{r}
+library(leaflet)
+
+leaflet(gares_geo) %>%
+  addTiles() %>%
+  addCircleMarkers(lng = ~longitude, lat = ~latitude,
+                   popup = ~gare, radius = 5, color = "purple")
+
+```
+
+On a des erreurs avec La Rochelle en Afrique du Sud et St Malo à la frontière du Canada et des Etats-Unis, comme a de que 2 erreurs sur 59 gares, on va coder les coordonnées à la main. On verra aussi que la gare du nord à Paris est mal placé, on la corrige en même temps ici.
+
+```{r}
+gares_geo$latitude[gares_geo$gare == "LA ROCHELLE VILLE"] <- 46.1591
+gares_geo$longitude[gares_geo$gare == "LA ROCHELLE VILLE"] <- -1.1511
+
+gares_geo$latitude[gares_geo$gare == "ST MALO"] <- 48.6493
+gares_geo$longitude[gares_geo$gare == "ST MALO"] <- -2.0252
+
+gares_geo$latitude[gares_geo$gare == "PARIS NORD"] <- 48.880948
+gares_geo$longitude[gares_geo$gare == "PARIS NORD"] <- 2.355314
+```
+
+On vérifie que les gares de St Malo et de La Rochelle sont bien placé
+
+```{r}
+leaflet(gares_geo) %>%
+  addTiles() %>%
+  addCircleMarkers(lng = ~longitude, lat = ~latitude,
+                   popup = ~gare, radius = 5, color = "purple")
+```
+
+On ajoute les colonnes pour la longitude et la latitude des gares de départs et d'arrivées.
+
+```{r}
+sncf <- sncf %>%
+  left_join(
+    gares_geo %>% 
+      select(gare, latitude, longitude) %>%
+      rename(depart = gare,
+             lat_depart = latitude,
+             lon_depart = longitude),
+    by = "depart"
+  )
+
+```
+
+```{r}
+sncf <- sncf %>%
+  left_join(
+    gares_geo %>% 
+      select(gare, latitude, longitude) %>%
+      rename(arrive = gare,
+             lat_arrive = latitude,
+             lon_arrive = longitude),
+    by = "arrive"
+  )
+
+```
+
+On obtient la base de données suivante
+
+```{r}
+head(sncf)
+```
+
+On va créer une colonne avec le pourcentage de train en retard
+
+```{r}
+sncf$taux_train_retard_depart = 100 * (sncf$nb_train_en_retard_depart / (sncf$nb_circulations_prevues - sncf$nb_trains_annule))
+```
+
+```{r}
+head(sncf)
+```
+
+On va regarder les problèmes de retard au départ des gares
+
+```{r}
+pb_depart = data.frame("Date" = sncf$date,
+                       "Gare" = sncf$depart,
+                       "nb_circulation_prevu"= sncf$nb_circulations_prevues,
+                       "nb_train_annule"=sncf$nb_trains_annule,
+                       "nb_train_en_retard_depart" = sncf$nb_train_en_retard_depart,
+                       "taux_train_retard_depart"= sncf$taux_train_retard_depart,
+                       "retard_moyen" = sncf$retard_moyen_train_depart,
+                       "retard_moyen_total" = sncf$retard_moyen_total_train_depart,
+                       "longitude" = sncf$lon_depart,
+                       "latitude" = sncf$lat_depart)
+```
+
+```{r}
+pb_depart
+```
+
+On regroupe par mois par gare.
+
+```{r}
+pb_depart_summ_mois <- pb_depart %>%
+  group_by(Date, Gare, longitude, latitude) %>%
+  summarise(
+    nb_circulation_prevu = sum(nb_circulation_prevu, na.rm = TRUE),
+    nb_train_annule = sum(nb_train_annule, na.rm = TRUE),
+    nb_train_en_retard_depart = sum(nb_train_en_retard_depart, na.rm = TRUE),
+    taux_train_retard_depart = sum(100*(nb_train_en_retard_depart/(nb_circulation_prevu-nb_train_annule)), na.rm = TRUE),
+    retard_moyen = mean(retard_moyen, na.rm = TRUE),
+    retard_moyen_total = mean(retard_moyen_total, na.rm = TRUE)
+  ) %>%
+  ungroup()
+```
+
+On regarde en général les gares.
+
+```{r}
+pb_depart_summ_mois
+```
+
+On regarde les problème de retard de départs avec toutes les données observées :
+
+```{r}
+pb_depart_total <- pb_depart %>%
+  group_by(Gare, longitude, latitude) %>%  
+  summarise(
+    nb_circulation_prevu = sum(nb_circulation_prevu, na.rm = TRUE),
+    nb_train_annule = sum(nb_train_annule, na.rm = TRUE),
+    nb_train_en_retard_depart = sum(nb_train_en_retard_depart, na.rm = TRUE),
+    taux_train_retard_depart = sum(100*(nb_train_en_retard_depart/(nb_circulation_prevu-nb_train_annule)), na.rm = TRUE),
+    retard_moyen = mean(retard_moyen, na.rm = TRUE),
+    retard_moyen_total = mean(retard_moyen_total, na.rm = TRUE)
+  ) %>%
+  ungroup()
+```
+
+```{r}
+pb_depart_total
+```
+
+```{r}
+sncf_hub=pb_depart_total %>%group_by(Gare) %>%summarise(circulation = sum(nb_circulation_prevu), taux= mean(taux_train_retard_depart))%>%
+ arrange(desc(circulation) )%>%
+  head(10)
+sncf_hub
+xtable(sncf_hub, caption= "Top 10 du nombre de circulation")
+```
+
+```{r}
+library(leaflet)
+library(htmltools)
+
+pal= colorNumeric(
+  palette = "YlOrRd",
+  domain  = pb_depart_total$taux_train_retard_depart
+)
+
+carte1=leaflet(pb_depart_total) %>%
+  addTiles() %>%
+  
+  addCircleMarkers(
+    lng = ~longitude,
+    lat = ~latitude,
+    radius = ~sqrt(nb_circulation_prevu) / 15,
+    color  = ~pal(taux_train_retard_depart),
+    fillOpacity = 0.7,
+    popup = ~paste0(
+      "<b>", Gare, "</b><br>",
+      "Retard moyen : ", round(retard_moyen,2), " min<br>",
+      "Taux de retard : ", round(taux_train_retard_depart, 2), " %<br>",
+      "Nombre de circulation prévu : ", nb_circulation_prevu, ""
+    )
+  ) %>%
+  
+  addLegend(
+    pal     = pal,
+    values = ~taux_train_retard_depart,
+    title  = "Taux de retard ",
+    position = "bottomright"
+  ) %>%
+  
+  addControl(
+    html = "<strong>Répartition géographique du trafic et intensité des retards par gare de départ</strong>",
+    position = "topright"
+  )
+
+carte1
+
+```
+
+```{r}
+library(htmlwidgets)
+saveWidget(carte1, "carte_interactive_retards.html", selfcontained = TRUE)
+```
+
+# Regroupement des trajets selon les causes de retard
+
+## ACP
+
+```{r}
+library(FactoMineR)
+library(factoextra)
+
+```
+
+```{r}
+causes22=sncf %>%group_by(trajet) %>%summarise(
+    Externe = mean(`%retard_externe`),
+    infra = mean(`%retard_cause_infrastructure`),
+    trafic = mean(`%_retard_gestion_trafic`),
+    materiel = mean(`%_retard_materiel_roulant`),
+    gestion = mean(`%_retard_gestion_gare_reutilisation_materiel`),
+    voyageurs= mean(`%retard_prise_en_compte_voyageurs`)
+    
+  ) 
+causes22=as.data.frame(causes22)
+head(causes22)
+```
+
+```{r}
+row.names(causes22)=causes22$trajet
+causes2=causes22[, -1]
+
+head(causes2)
+```
+
+```{r}
+
+
+library(FactoMineR)
+library(factoextra)
+
+res=PCA(causes2, graph = FALSE)
+print(res)
+```
+
+```{r}
+valeurs_propres=res$eig
+print(valeurs_propres)
+xtable(valeurs_propres, label = "Tableau des valeurs propres")
+
+```
+
+```{r}
+res$var$contrib[, 1:3]
+xtable(res$var$contrib[, 1:3], caption="Contribution des variables sur les axes")
+```
+
+```{r}
+plot.PCA(res, choix = "var", axes = c(1, 2))
+plot.PCA(res, choix = "var", axes = c(1, 3))
+plot.PCA(res, choix = "var", axes = c(2, 3))
+```
+
+```{r}
+??pca
+plot.PCA(res, choix = "ind", axes = c(1, 2),cex = 0.5, select = "contrib 40")
+plot.PCA(res, choix = "ind", axes = c(1, 3), cex = 0.5, select = "contrib 40")
+plot.PCA(res, choix = "ind", axes = c(2, 3), cex = 0.5, select = "contrib 40")
+```
+
+## Clustering
+
+```{r}
+library(cluster)  
+library(factoextra)
+donnees_scaled=scale(causes2, )
+head(donnees_scaled)
+```
+
+```{r}
+```
+
+```{r}
+summary(donnees_scaled)
+```
+
+```{r}
+fviz_nbclust(donnees_scaled, kmeans, method = "wss", k.max = 25)+
+  labs(title = "Nombre de clusters optimal",
+       x = "Nombre de Clusters",
+       y = "Inertie ") +
+  theme_minimal()
+```
+
+```{r}
+fviz_nbclust(donnees_scaled, kmeans, method = "silhouette",  k.max = 10)
+```
+
+```{r}
+res_kmeans=kmeans(donnees_scaled, centers =4, nstart = 25)
+head(res_kmeans$cluster)
+```
+
+```{r}
+causes2$cluster =as.factor(res_kmeans$cluster)
+table(causes2$cluster)
+xtable(table(causes2$cluster), caption="Répartition des lignes par classe" )
+```
+
+```{r}
+profils_clusters=causes2 %>%
+  group_by(cluster)%>% summarise(across(where(is.numeric), mean))
+
+profils_clusters
+
+
+profils_long=profils_clusters %>%pivot_longer(cols = -cluster, names_to = "Cause", values_to = "Pourcentage")
+
+ggplot(profils_long, aes(x = cluster, y = Pourcentage, fill = Cause)) +
+  geom_bar(stat = "identity", position = "fill") +
+  labs(title = "Distributions des causes sur les 4 clusters identifiés",
+       y = "Part de la cause",
+       x = " Cluster") +
+  theme_minimal()
+profils_long
+
+xtable(profils_clusters)
+```
+
+```{r}
+fviz_cluster(res_kmeans, 
+             data =  res$ind$coord[, c(1,2)], 
+             geom = "point",
+             main = "Projection des 4 Clusters")
+```
+
+```{r}
+fviz_cluster(res_kmeans,
+             data = res$ind$coord[, c(2,3)],
+             geom = "point",
+             main = "Projection des clusters sur les axes 2 et 3")
+
+```
+
+```{r}
+causes22[causes2$cluster==1,]$trajet
+causes22[causes2$cluster==2,]$trajet
+causes22[causes2$cluster==3,]$trajet
+causes22[causes2$cluster==4,]$trajet
+```
+
+# Prédiction du taux de retard en utilisant les valeurs du passé
+
+Series temporelles
+
+```{r}
+head(sncf)
+
+```
+
+```{r}
+str(sncf)
+
+```
+
+```{r}
+sncf$annee=as.numeric(sncf$annee)
+sncf$mois=as.numeric(sncf$mois)
+sncf_mois=sncf %>%
+  group_by(annee, mois) %>%
+  summarise(
+    nb_circulations = sum(nb_circulations_prevues),
+    nb_retards = sum(nb_train_en_retard_arrivee),
+    taux_retard_moy = mean(taux_retard)
+  ) %>%
+  arrange(annee, mois)
+```
+
+```{r}
+sncf_mois
+```
+
+```{r}
+ts_retard=ts(sncf_mois$taux_retard_moy, start = c(min(sncf_mois$annee), min(sncf_mois$mois)), frequency = 12)
+plot(ts_retard, type="l", main="Taux moyen de retard mensuel", ylab="Taux de retard", xlab="Temps")
+
+```
+
+```{r}
+decomp=stl(ts_retard, s.window="periodic")
+plot(decomp)
+```
+
+```{r}
+
+library(forecast)
+arima=auto.arima(ts_retard, seasonal=TRUE)
+summary(arima)
+```
+
+```{r}
+prediction= predict(arima, n.ahead = 24)
+prediction
+plot.ts(prediction$pred)
+
+```
+
+```{r}
+forecast_retard=forecast(arima, h=24)
+plot(forecast_retard)
+```
